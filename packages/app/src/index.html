@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>SVG 粒子集合＋霧散エフェクト</title>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      width: 100%;
+      height: 100%;
+    }
+    /* キャンバスは余白分拡張しておき、オフセット */
+    #canvas {
+      position: absolute;
+      top: -100px;  /* margin と同じ値 */
+      left: -100px;
+    }
+    #controls {
+      position: absolute;
+      top: 10px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 10;
+      background: rgba(255, 255, 255, 0.8);
+      padding: 5px;
+      border-radius: 4px;
+    }
+  </style>
+</head>
+<body>
+  <div id="controls">
+    <!-- SVG ファイルをアップロードするためのファイル入力 -->
+    <input type="file" id="fileInput" accept=".svg" />
+    <input type="text" id="textInput" placeholder="テキストを入力してください (カンマ区切りで複数指定)" />
+    <!-- 色指定用カラーピッカー -->
+    <input type="color" id="colorInput" value="#000000" />
+    <button id="startButton">エフェクト開始</button>
+  </div>
+  <canvas id="canvas"></canvas>
+  <!-- <script src="../dist/imgAnimation.js"></script>
+  <script src="../dist/textAnimation.js"></script> -->
+
+  <script type="module">
+    import { textAnime } from "../dist/textAnimation.js";
+    import { imgAnime } from "../dist/imgAnimation.js";
+
+  window.addEventListener("DOMContentLoaded", () => {
+    const startButton = document.getElementById("startButton");
+    const textInput = document.getElementById("textInput");
+    const colorInput = document.getElementById("colorInput");
+    const fileInput = document.getElementById("fileInput");
+
+    startButton.addEventListener("click", () => {
+      const file = fileInput.files && fileInput.files[0];
+      if (!file) {
+        alert("SVG ファイルを選択してください");
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const svgData = e.target?.result;
+        const img = new Image();
+        img.onload = () => {
+          
+          imgAnime(img,document.getElementById("canvas"),() => {
+            const inputText = textInput.value || "Hello TypeScript!";
+            textAnime(inputText, colorInput.value);
+          });
+          
+        };
+        img.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svgData);
+      };
+      reader.readAsText(file);
+    });
+  });
+  
+  </script>
+</body>
+</html>
