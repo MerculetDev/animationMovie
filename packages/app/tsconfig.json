@@ -2,7 +2,7 @@
   "compilerOptions": {
     "target": "ES5",
     "lib": ["ES2015", "DOM"],
-    "module": "commonjs",
+    "module": "ES6",  // ← ここを変更
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,

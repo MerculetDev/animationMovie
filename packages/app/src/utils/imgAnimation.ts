@@ -102,7 +102,7 @@ class ParticleEffectImg {
           const pixelColor = `${r}, ${g}, ${b}`;
           // 集合フェーズの逆再生用に、散乱用のベクトル S を生成
           const theta = Math.random() * 2 * Math.PI;
-          console.log(Math.random());
+
           const zDir = Math.random() * 2 - 1;
           const xyLen = Math.sqrt(1 - zDir * zDir);
           const speed = Math.random() * 4 + 2;
@@ -145,14 +145,19 @@ class ParticleEffectImg {
 
     // 全粒子の life は同時更新されるので、先頭の粒子の life をグローバルな値とする
     const globalLife = this.particles.length > 0 ? this.particles[0].life : 0;
-
+    console.log(
+      globalLife,
+      this.inDuration + this.holdDuration + this.scatterDuration
+    );
     // 終了条件：全粒子の life が総寿命に達したら終了
     if (
       this.particles.length > 0 &&
-      globalLife >= this.inDuration + this.holdDuration + this.scatterDuration
+      globalLife >=
+        this.inDuration + this.holdDuration + this.scatterDuration - 1
     ) {
       this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
       // 終了時に onComplete コールバックを呼び出す
+      console.log("ここで終了", onComplete);
       if (onComplete) onComplete();
       return;
     }
@@ -235,58 +240,59 @@ class ParticleEffectImg {
   }
 }
 
-window.addEventListener("DOMContentLoaded", () => {
-  const startButton = document.getElementById(
-    "startButton"
-  ) as HTMLButtonElement;
-  const fileInput = document.getElementById("fileInput") as HTMLInputElement;
+// window.addEventListener("DOMContentLoaded", () => {
+//   const startButton = document.getElementById(
+//     "startButton"
+//   ) as HTMLButtonElement;
+//   const fileInput = document.getElementById("fileInput") as HTMLInputElement;
 
-  startButton.addEventListener("click", () => {
-    const file = fileInput.files && fileInput.files[0];
-    if (!file) {
-      alert("SVG ファイルを選択してください");
-      return;
-    }
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const svgData = e.target?.result as string;
-      const img = new Image();
-      img.onload = () => {
-        const effect = new ParticleEffectImg(
-          "canvas",
-          2, // particleSize
-          100, // inDuration
-          60, // holdDuration
-          100, // scatterDuration
-          100 // margin
-        );
-        effect.image = img;
-        effect.createParticlesFromImage(img);
-        effect.animate();
-      };
-      img.src =
-        "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svgData);
-    };
-    reader.readAsText(file);
-  });
-});
+//   startButton.addEventListener("click", () => {
+//     const file = fileInput.files && fileInput.files[0];
+//     if (!file) {
+//       alert("SVG ファイルを選択してください");
+//       return;
+//     }
+//     const reader = new FileReader();
+//     reader.onload = (e) => {
+//       const svgData = e.target?.result as string;
+//       const img = new Image();
+//       img.onload = () => {
+//         const effect = new ParticleEffectImg(
+//           "canvas",
+//           2, // particleSize
+//           100, // inDuration
+//           60, // holdDuration
+//           100, // scatterDuration
+//           100 // margin
+//         );
+//         effect.image = img;
+//         effect.createParticlesFromImage(img);
+//         effect.animate();
+//       };
+//       img.src =
+//         "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svgData);
+//     };
+//     reader.readAsText(file);
+//   });
+// });
 
 export const imgAnime = (
   img: HTMLImageElement,
   canvas: HTMLCanvasElement,
   onComplete?: () => void
 ) => {
-  img.onload = () => {
-    const effect = new ParticleEffectImg(
-      canvas.id,
-      100, // inDuration
-      60, // holdDuration
-      100, // scatterDuration
-      100 // margin
-    );
-    effect.image = img;
-    effect.createParticlesFromImage(img);
-    // 画像アニメーションが終了したら onComplete コールバックで文字アニメーションを開始
-    if (onComplete) effect.animate(() => onComplete());
-  };
+  const effect = new ParticleEffectImg(
+    canvas.id,
+    1, // particleSize
+    100, // inDuration
+    60, // holdDuration
+    100, // scatterDuration
+    100 // margin
+  );
+  effect.image = img;
+  effect.createParticlesFromImage(img);
+  // 画像アニメーションが終了したら onComplete コールバックで文字アニメーションを開始
+  effect.animate(() => {
+    if (onComplete) onComplete();
+  });
 };

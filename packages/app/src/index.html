@@ -53,22 +53,22 @@
     const fileInput = document.getElementById("fileInput");
 
     startButton.addEventListener("click", () => {
+      
       const file = fileInput.files && fileInput.files[0];
       if (!file) {
         alert("SVG ファイルを選択してください");
         return;
       }
+      
       const reader = new FileReader();
       reader.onload = (e) => {
         const svgData = e.target?.result;
         const img = new Image();
         img.onload = () => {
-          
-          imgAnime(img,document.getElementById("canvas"),() => {
-            const inputText = textInput.value || "Hello TypeScript!";
+          imgAnime(img, document.getElementById("canvas"), () => {
+            const inputText = textInput.value || "EPOCH MAKING COMPANY,WARRANTY,LIVING SUPPORT,BENEFITS,HOME INSPECTION,QUALITY FOR YOUR SMILE";
             textAnime(inputText, colorInput.value);
           });
-          
         };
         img.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svgData);
       };

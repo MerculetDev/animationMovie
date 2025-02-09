@@ -1,6 +1,3 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.imgAnime = void 0;
 var ParticleEffectImg = /** @class */ (function () {
     /**
      * @param canvasId       Canvas 要素の ID
@@ -78,7 +75,6 @@ var ParticleEffectImg = /** @class */ (function () {
                     var pixelColor = "".concat(r, ", ").concat(g, ", ").concat(b);
                     // 集合フェーズの逆再生用に、散乱用のベクトル S を生成
                     var theta = Math.random() * 2 * Math.PI;
-                    console.log(Math.random());
                     var zDir = Math.random() * 2 - 1;
                     var xyLen = Math.sqrt(1 - zDir * zDir);
                     var speed = Math.random() * 4 + 2;
@@ -120,11 +116,14 @@ var ParticleEffectImg = /** @class */ (function () {
         var centerY = this.margin + window.innerHeight / 2;
         // 全粒子の life は同時更新されるので、先頭の粒子の life をグローバルな値とする
         var globalLife = this.particles.length > 0 ? this.particles[0].life : 0;
+        console.log(globalLife, this.inDuration + this.holdDuration + this.scatterDuration);
         // 終了条件：全粒子の life が総寿命に達したら終了
         if (this.particles.length > 0 &&
-            globalLife >= this.inDuration + this.holdDuration + this.scatterDuration) {
+            globalLife >=
+                this.inDuration + this.holdDuration + this.scatterDuration - 1) {
             this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
             // 終了時に onComplete コールバックを呼び出す
+            console.log("ここで終了", onComplete);
             if (onComplete)
                 onComplete();
             return;
@@ -204,49 +203,54 @@ var ParticleEffectImg = /** @class */ (function () {
     };
     return ParticleEffectImg;
 }());
-window.addEventListener("DOMContentLoaded", function () {
-    var startButton = document.getElementById("startButton");
-    var fileInput = document.getElementById("fileInput");
-    startButton.addEventListener("click", function () {
-        var file = fileInput.files && fileInput.files[0];
-        if (!file) {
-            alert("SVG ファイルを選択してください");
-            return;
-        }
-        var reader = new FileReader();
-        reader.onload = function (e) {
-            var _a;
-            var svgData = (_a = e.target) === null || _a === void 0 ? void 0 : _a.result;
-            var img = new Image();
-            img.onload = function () {
-                var effect = new ParticleEffectImg("canvas", 2, // particleSize
-                100, // inDuration
-                60, // holdDuration
-                100, // scatterDuration
-                100 // margin
-                );
-                effect.image = img;
-                effect.createParticlesFromImage(img);
-                effect.animate();
-            };
-            img.src =
-                "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svgData);
-        };
-        reader.readAsText(file);
-    });
-});
-var imgAnime = function (img, canvas, onComplete) {
-    img.onload = function () {
-        var effect = new ParticleEffectImg(canvas.id, 100, // inDuration
-        60, // holdDuration
-        100, // scatterDuration
-        100 // margin
-        );
-        effect.image = img;
-        effect.createParticlesFromImage(img);
-        // 画像アニメーションが終了したら onComplete コールバックで文字アニメーションを開始
+// window.addEventListener("DOMContentLoaded", () => {
+//   const startButton = document.getElementById(
+//     "startButton"
+//   ) as HTMLButtonElement;
+//   const fileInput = document.getElementById("fileInput") as HTMLInputElement;
+//   startButton.addEventListener("click", () => {
+//     const file = fileInput.files && fileInput.files[0];
+//     if (!file) {
+//       alert("SVG ファイルを選択してください");
+//       return;
+//     }
+//     const reader = new FileReader();
+//     reader.onload = (e) => {
+//       const svgData = e.target?.result as string;
+//       const img = new Image();
+//       img.onload = () => {
+//         const effect = new ParticleEffectImg(
+//           "canvas",
+//           2, // particleSize
+//           100, // inDuration
+//           60, // holdDuration
+//           100, // scatterDuration
+//           100 // margin
+//         );
+//         effect.image = img;
+//         effect.createParticlesFromImage(img);
+//         effect.animate();
+//       };
+//       img.src =
+//         "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svgData);
+//     };
+//     reader.readAsText(file);
+//   });
+// });
+export var imgAnime = function (img, canvas, onComplete) {
+    var effect = new ParticleEffectImg(canvas.id, 1, // particleSize
+    100, // inDuration
+    60, // holdDuration
+    100, // scatterDuration
+    100 // margin
+    );
+    console.log(2222);
+    effect.image = img;
+    effect.createParticlesFromImage(img);
+    // 画像アニメーションが終了したら onComplete コールバックで文字アニメーションを開始
+    effect.animate(function () {
+        console.log(11111);
         if (onComplete)
-            effect.animate(function () { return onComplete(); });
-    };
+            onComplete();
+    });
 };
-exports.imgAnime = imgAnime;

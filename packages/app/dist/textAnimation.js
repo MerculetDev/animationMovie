@@ -1,4 +1,3 @@
-"use strict";
 var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
     function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
     return new (P || (P = Promise))(function (resolve, reject) {
@@ -35,8 +34,6 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
         if (op[0] & 5) throw op[1]; return { value: op[0] ? op[1] : void 0, done: true };
     }
 };
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.textAnime = void 0;
 var ParticleEffectText = /** @class */ (function () {
     /**
      * @param canvasId      Canvas 要素の ID
@@ -292,7 +289,7 @@ function startSequentialEffectText(texts, chosenColor) {
     };
     runEffect();
 }
-var textAnime = function (inputText, color) {
+export var textAnime = function (inputText, color) {
     if (color === void 0) { color = "#000000"; }
     var texts = inputText
         .split(",")
@@ -300,4 +297,3 @@ var textAnime = function (inputText, color) {
         .filter(function (t) { return t !== ""; });
     startSequentialEffectText(texts, color);
 };
-exports.textAnime = textAnime;
