@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <title>SVG 粒子集合＋霧散エフェクト</title>
+  <link rel="stylesheet" href="https://use.typekit.net/ktw3yia.css">
   <style>
     html, body {
       margin: 0;
@@ -10,6 +11,7 @@
       overflow: hidden;
       width: 100%;
       height: 100%;
+      font-family: 'bebas-kai';
     }
     /* キャンバスは余白分拡張しておき、オフセット */
     #canvas {
@@ -31,51 +33,45 @@
 </head>
 <body>
   <div id="controls">
-    <!-- SVG ファイルをアップロードするためのファイル入力 -->
-    <input type="file" id="fileInput" accept=".svg" />
-    <input type="text" id="textInput" placeholder="テキストを入力してください (カンマ区切りで複数指定)" />
     <!-- 色指定用カラーピッカー -->
-    <input type="color" id="colorInput" value="#000000" />
+    <input type="color" id="colorInput" value="#09d062" />
     <button id="startButton">エフェクト開始</button>
   </div>
   <canvas id="canvas"></canvas>
-  <!-- <script src="../dist/imgAnimation.js"></script>
-  <script src="../dist/textAnimation.js"></script> -->
-
+  
   <script type="module">
     import { textAnime } from "../dist/textAnimation.js";
     import { imgAnime } from "../dist/imgAnimation.js";
 
-  window.addEventListener("DOMContentLoaded", () => {
-    const startButton = document.getElementById("startButton");
-    const textInput = document.getElementById("textInput");
-    const colorInput = document.getElementById("colorInput");
-    const fileInput = document.getElementById("fileInput");
+    window.addEventListener("DOMContentLoaded", () => {
+      const startButton = document.getElementById("startButton");
+      const colorInput = document.getElementById("colorInput");
 
-    startButton.addEventListener("click", () => {
-      
-      const file = fileInput.files && fileInput.files[0];
-      if (!file) {
-        alert("SVG ファイルを選択してください");
-        return;
-      }
-      
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        const svgData = e.target?.result;
+      startButton.addEventListener("click", () => {
         const img = new Image();
-        img.onload = () => {
-          imgAnime(img, document.getElementById("canvas"), () => {
-            const inputText = textInput.value || "EPOCH MAKING COMPANY,WARRANTY,LIVING SUPPORT,BENEFITS,HOME INSPECTION,QUALITY FOR YOUR SMILE";
-            textAnime(inputText, colorInput.value);
-          });
+        img.onload = async () => {
+          await imgAnime(img, document.getElementById("canvas"),{inDuration:120,disappearType:1});
+          const inputText = [
+            { text: "EPOCH MAKING COMPANY", config:{rough: 0}},
+            { text: "WARRANTY",config:{ rough: 2, appearType:1,inDuration:150} },
+            { text: "LIVING SUPPORT",config:{ rough: 2} },
+            { text: "BENEFITS",config:{ rough: 2} },
+            { text: "HOME INSPECTION",config:{ rough: 2} },
+            { text: "QUALITY FOR YOUR SMILE",config:{ rough: 2} },
+            
+          ];
+
+          for (const textEl of inputText) {
+            await textAnime(textEl.text, colorInput.value, textEl.config);
+          }
+          
+          // await textAnime("QUALITY FOR YOUR SMILE", colorInput.value, { rough: 2 });
+          // await textAnime("QUALITY", colorInput.value, { rough: 0, appearType: 1,floatRate:1,inDuration:260,holdDuration:0,scatterDuration:100 });
         };
-        img.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svgData);
-      };
-      reader.readAsText(file);
+        // SVG ファイルを相対パスで指定
+        img.src = "./logo.svg";
+      });
     });
-  });
-  
   </script>
 </body>
 </html>

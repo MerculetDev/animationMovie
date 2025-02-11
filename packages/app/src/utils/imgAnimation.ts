@@ -9,21 +9,25 @@ class ParticleEffectImg {
   image: HTMLImageElement = new Image();
   particleSize: number;
   inDuration: number; // 集合（Gather）フェーズのフレーム数
-  holdDuration: number; // 画像（Hold）フェーズのフレーム数
-  scatterDuration: number; // 霧散（Scatter）フェーズのフレーム数
+  holdDuration: number; // 画像（Hold）フェーズのフレーズ数
+  scatterDuration: number; // 霧散（Scatter）フェーズのフレーズ数
   margin: number; // 表示領域外として利用する余白（px）
-
   // パースペクティブ用定数
   focalLength: number = 300;
+
+  // 新たに追加するパラメータ
+  appearType: number;
+  disappearType: number;
 
   /**
    * @param canvasId       Canvas 要素の ID
    * @param particleSize   粒子のサイズ（例: 1）
    * @param inDuration     集合（Gather）フェーズのフレーム数（例: 100）
-   * @param holdDuration   画像（Hold）フェーズのフレーム数（例: 60）
+   * @param holdDuration   画像（Hold）フェーズのフレーズ数（例: 60）
    * @param scatterDuration 霧散（Scatter）フェーズのフレーム数（例: 100）
-   * @param textColor      粒子のデフォルト色（例: '#000000'）
    * @param margin         表示領域外の余白のピクセル数（例: 100）
+   * @param appearType     出現時のアニメーションタイプ（デフォルト: 0）
+   * @param disappearType  消滅時のアニメーションタイプ（デフォルト: 0）
    */
   constructor(
     canvasId: string,
@@ -31,7 +35,9 @@ class ParticleEffectImg {
     inDuration: number = 100,
     holdDuration: number = 60,
     scatterDuration: number = 100,
-    margin: number = 100
+    margin: number = 100,
+    appearType: number = 0,
+    disappearType: number = 0
   ) {
     this.canvas = document.getElementById(canvasId) as HTMLCanvasElement;
     this.ctx = this.canvas.getContext("2d")!;
@@ -39,9 +45,9 @@ class ParticleEffectImg {
     this.inDuration = inDuration;
     this.holdDuration = holdDuration;
     this.scatterDuration = scatterDuration;
-    // 総寿命は inDuration + holdDuration + scatterDuration
-    // （各粒子が散乱してフェードアウトしきるまで）
     this.margin = margin;
+    this.appearType = appearType;
+    this.disappearType = disappearType;
     this.resizeCanvas();
     window.addEventListener("resize", () => this.resizeCanvas());
   }
@@ -102,7 +108,6 @@ class ParticleEffectImg {
           const pixelColor = `${r}, ${g}, ${b}`;
           // 集合フェーズの逆再生用に、散乱用のベクトル S を生成
           const theta = Math.random() * 2 * Math.PI;
-
           const zDir = Math.random() * 2 - 1;
           const xyLen = Math.sqrt(1 - zDir * zDir);
           const speed = Math.random() * 4 + 2;
@@ -145,10 +150,23 @@ class ParticleEffectImg {
 
     // 全粒子の life は同時更新されるので、先頭の粒子の life をグローバルな値とする
     const globalLife = this.particles.length > 0 ? this.particles[0].life : 0;
-    console.log(
-      globalLife,
-      this.inDuration + this.holdDuration + this.scatterDuration
-    );
+
+    // ★ここで X 軸回りの回転角度と Z 軸回りの回転角度を算出 ★
+    // Gather フェーズ中はそれぞれ初期の角度から 0 に線形補間
+    let rotationAngle = 0; // X 軸回り（y, z 座標に影響）
+    let zRotationAngle = 0; // Z 軸回り（x, y 座標に影響）
+
+    if (globalLife < this.inDuration) {
+      // 例として X 軸回転は最大180°、Z 軸回転は最大90° から 0° へ補間
+      rotationAngle = Math.PI * (1 - globalLife / this.inDuration);
+      zRotationAngle = (Math.PI / 4) * (-1 + globalLife / this.inDuration);
+      centerY = this.margin + window.innerHeight / 2;
+    } else {
+      rotationAngle = 0;
+      zRotationAngle = 0;
+      centerY = this.margin + window.innerHeight / 2;
+    }
+
     // 終了条件：全粒子の life が総寿命に達したら終了
     if (
       this.particles.length > 0 &&
@@ -156,13 +174,11 @@ class ParticleEffectImg {
         this.inDuration + this.holdDuration + this.scatterDuration - 1
     ) {
       this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-      // 終了時に onComplete コールバックを呼び出す
-      console.log("ここで終了", onComplete);
       if (onComplete) onComplete();
       return;
     }
 
-    // 各粒子の更新処理（Gather／Hold／Scatter の各フェーズ）
+    // 各粒子の更新処理（Gather／Hold／Scatter／Disappear の各フェーズ）
     for (const p of this.particles) {
       if (p.life < this.inDuration) {
         // Gather（In）フェーズ：初期位置からターゲット位置へ補間
@@ -177,32 +193,68 @@ class ParticleEffectImg {
         p.y = p.targetY;
         p.z = p.targetZ;
       } else {
-        // Scatter（霧散）フェーズ：最初に逆ベクトルを適用し、その後位置更新＆フェードアウト
-        if (!p.scattered) {
-          p.vx = -p.vx;
-          p.vy = -p.vy;
-          p.vz = -p.vz;
-          p.scattered = true;
+        // Scatter／Disappear フェーズ
+        if (this.disappearType === 1) {
+          // 消滅時のアニメーション：画像がカメラ方向（z 軸負方向）に進むが、
+          // ここでは画像の表示サイズが画面の 2 倍（scale >= 2、つまり p.z < -150）になったタイミングで消える
+          if (!p.scattered) {
+            // 初回のみ、z 軸方向の速度を負（こちらに向かう）に固定
+            p.vz = -500 / this.scatterDuration;
+            p.scattered = true;
+          }
+          // この場合、x, y はそのままで z だけ更新
+          p.z += p.vz;
+        } else {
+          // 従来の散乱（霧散）処理：初回に速度を反転し、その後更新
+          if (!p.scattered) {
+            p.vx = -p.vx;
+            p.vy = -p.vy;
+            p.vz = -p.vz;
+            p.scattered = true;
+          }
+          p.x += p.vx;
+          p.y += p.vy;
+          p.z += p.vz;
         }
-        p.x += p.vx;
-        p.y += p.vy;
-        p.z += p.vz;
       }
       p.life++;
 
-      // Scatter フェーズでのフェードアウト処理
+      // 各粒子の不透明度設定
       let opacity = 1;
-      if (p.life >= this.inDuration + this.holdDuration) {
-        const scatterLife = p.life - (this.inDuration + this.holdDuration);
-        opacity = 1 - scatterLife / this.scatterDuration;
-        opacity = Math.max(opacity, 0);
+      if (this.disappearType === 1) {
+        // vanishThreshold: p.z が -150 (scale ≒2) を下回ったら透明にする
+        if (p.z < -500) {
+          opacity = 0;
+        }
+      } else {
+        // 従来の霧散フェーズでは徐々にフェードアウト
+        if (p.life >= this.inDuration + this.holdDuration) {
+          const scatterLife = p.life - (this.inDuration + this.holdDuration);
+          opacity = 1 - scatterLife / this.scatterDuration;
+          opacity = Math.max(opacity, 0);
+        }
       }
+
+      // ★各粒子に対して、まず X 軸回りの回転を適用（y, z 座標を変換） ★
+      const dy = p.y - centerY;
+      const rotatedY =
+        dy * Math.cos(rotationAngle) - p.z * Math.sin(rotationAngle);
+      const rotatedZ =
+        dy * Math.sin(rotationAngle) + p.z * Math.cos(rotationAngle);
 
       // パースペクティブ投影
       const effectiveZ = Math.max(p.z, -this.focalLength);
-      const scale = this.focalLength / (this.focalLength + effectiveZ);
-      const screenX = centerX + (p.x - centerX) * scale;
-      const screenY = centerY + (p.y - centerY) * scale;
+      const scale = (this.focalLength / (this.focalLength + effectiveZ)) * 0.5;
+
+      // ★次に Z 軸回りの回転を適用（x, (X軸回転後の)y 座標を変換） ★
+      const dx = p.x - centerX;
+      const finalDx =
+        dx * Math.cos(zRotationAngle) - rotatedY * Math.sin(zRotationAngle);
+      const finalDy =
+        dx * Math.sin(zRotationAngle) + rotatedY * Math.cos(zRotationAngle);
+
+      const screenX = centerX + finalDx * scale;
+      const screenY = centerY + finalDy * scale;
       const radius = this.particleSize * scale;
 
       this.ctx.fillStyle = `rgba(${p.color}, ${opacity})`;
@@ -217,7 +269,7 @@ class ParticleEffectImg {
     requestAnimationFrame(() => this.animate(onComplete));
   }
 
-  // 補助関数（lerp, easeOutQuad, hexToRgb など）はそのまま…
+  // 補助関数
   private lerp(a: number, b: number, t: number): number {
     return a + (b - a) * t;
   }
@@ -240,59 +292,51 @@ class ParticleEffectImg {
   }
 }
 
-// window.addEventListener("DOMContentLoaded", () => {
-//   const startButton = document.getElementById(
-//     "startButton"
-//   ) as HTMLButtonElement;
-//   const fileInput = document.getElementById("fileInput") as HTMLInputElement;
-
-//   startButton.addEventListener("click", () => {
-//     const file = fileInput.files && fileInput.files[0];
-//     if (!file) {
-//       alert("SVG ファイルを選択してください");
-//       return;
-//     }
-//     const reader = new FileReader();
-//     reader.onload = (e) => {
-//       const svgData = e.target?.result as string;
-//       const img = new Image();
-//       img.onload = () => {
-//         const effect = new ParticleEffectImg(
-//           "canvas",
-//           2, // particleSize
-//           100, // inDuration
-//           60, // holdDuration
-//           100, // scatterDuration
-//           100 // margin
-//         );
-//         effect.image = img;
-//         effect.createParticlesFromImage(img);
-//         effect.animate();
-//       };
-//       img.src =
-//         "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svgData);
-//     };
-//     reader.readAsText(file);
-//   });
-// });
-
+/**
+ * imgAnime 関数
+ * 渡された img と canvas を用いて画像アニメーションを実行し、
+ * アニメーション完了まで await できるよう Promise を返します。
+ * @param img 描画する画像（HTMLImageElement）
+ * @param canvas 描画先の canvas 要素
+ * @param appearType 出現時のアニメーションタイプ（例: 0）
+ * @param disappearType 消滅時のアニメーションタイプ（例: 0 または 1）
+ */
 export const imgAnime = (
   img: HTMLImageElement,
   canvas: HTMLCanvasElement,
-  onComplete?: () => void
-) => {
-  const effect = new ParticleEffectImg(
-    canvas.id,
-    1, // particleSize
-    100, // inDuration
-    60, // holdDuration
-    100, // scatterDuration
-    100 // margin
-  );
-  effect.image = img;
-  effect.createParticlesFromImage(img);
-  // 画像アニメーションが終了したら onComplete コールバックで文字アニメーションを開始
-  effect.animate(() => {
-    if (onComplete) onComplete();
+  config: {
+    appearType: number;
+    disappearType: number;
+    particleSize: number;
+    inDuration: number;
+    holdDuration: number;
+    scatterDuration: number;
+    margin: number;
+  } = {
+    appearType: 0,
+    disappearType: 0,
+    particleSize: 2,
+    inDuration: 60,
+    holdDuration: 60,
+    scatterDuration: 20,
+    margin: 100,
+  }
+): Promise<void> => {
+  return new Promise<void>((resolve) => {
+    console.log(config);
+    const effect = new ParticleEffectImg(
+      canvas.id,
+      config.particleSize ?? 2,
+      config.inDuration ?? 60,
+      config.holdDuration ?? 60,
+      config.scatterDuration ?? 20,
+      config.margin ?? 100,
+      config.appearType ?? 0, // appearType
+      config.disappearType ?? 0 // disappearType
+    );
+    effect.image = img;
+    effect.createParticlesFromImage(img);
+    // アニメーションが完了したら resolve() を呼び出す
+    effect.animate(() => resolve());
   });
 };

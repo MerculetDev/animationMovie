@@ -24,4 +24,6 @@ export interface Particle {
   scattered: boolean;
   // 粒子の色（"r, g, b" の形式）
   color: string;
+  xRough?: number;
+  yRough?: number;
 }

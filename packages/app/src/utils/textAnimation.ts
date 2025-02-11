@@ -9,10 +9,12 @@ class ParticleEffectText {
   font: string;
   particleSize: number;
   inDuration: number; // 集合（In）フェーズのフレーム数
-  holdDuration: number; // テキスト形状を保持するフレーズ数
+  holdDuration: number; // テキスト形状を保持するフェーズ数
   scatterDuration: number; // 霧散（Scatter）フェーズのフレーム数
   textColor: string; // テキスト／粒子の色
   margin: number; // 表示領域外として利用する余白（px）
+  rough: number;
+  appearType: number; // 0: デフォルト, 1: 空中浮遊＋近接効果
 
   // パースペクティブ用定数
   focalLength: number = 300;
@@ -21,17 +23,6 @@ class ParticleEffectText {
   frameCounter: number = 0;
   flashDuration: number = 20; // フラッシュ効果のフレーム数
 
-  /**
-   * @param canvasId      Canvas 要素の ID
-   * @param text          表示するテキスト
-   * @param font          使用するフォント (例: 'bold 50px Arial')
-   * @param particleSize  粒子のサイズ（例: 1）
-   * @param inDuration    集合（In）フェーズのフレーム数（例: 100）
-   * @param holdDuration  Hold フェーズのフレーム数（例: 60）
-   * @param scatterDuration 霧散（Scatter）フェーズのフレーム数（例: 100）
-   * @param textColor     テキスト／粒子の色（例: '#000000'）
-   * @param margin        画面外として利用する余白のピクセル数（例: 100）
-   */
   constructor(
     canvasId: string,
     text: string,
@@ -41,7 +32,9 @@ class ParticleEffectText {
     holdDuration: number = 60,
     scatterDuration: number = 100,
     textColor: string = "#000000",
-    margin: number = 100
+    margin: number = 100,
+    rough: number = 0,
+    appearType: number = 0 // 追加: 表示タイプ
   ) {
     this.canvas = document.getElementById(canvasId) as HTMLCanvasElement;
     this.ctx = this.canvas.getContext("2d")!;
@@ -53,6 +46,8 @@ class ParticleEffectText {
     this.scatterDuration = scatterDuration;
     this.textColor = textColor;
     this.margin = margin;
+    this.rough = rough;
+    this.appearType = appearType;
     this.resizeCanvas();
     window.addEventListener("resize", () => this.resizeCanvas());
   }
@@ -64,7 +59,6 @@ class ParticleEffectText {
   }
 
   // Offscreen Canvas にテキストを描画し、ターゲット位置（2D）を取得する
-  // ※ targetZ はランダムに（例: -30～30）設定
   createParticlesFromText() {
     const offscreenCanvas = document.createElement("canvas");
     offscreenCanvas.width = this.canvas.width;
@@ -92,17 +86,15 @@ class ParticleEffectText {
     this.particles = [];
     const gap = this.particleSize; // サンプリング間隔
     // 集合時の奥行き範囲（targetZ の幅：例として ±30）
-    const gatherDepthRange = 0; // この例では 0 として固定（必要に応じて変更可）
+    const gatherDepthRange = 0; // この例では 0 として固定
     // アルファ閾値を 10 に下げることで、アンチエイリアス部も粒子化
     for (let y = 0; y < offscreenCanvas.height; y += gap) {
       for (let x = 0; x < offscreenCanvas.width; x += gap) {
         const index = (x + y * offscreenCanvas.width) * 4;
         const alpha = data[index + 3];
         if (alpha > 10) {
-          // targetZ を -gatherDepthRange/2～gatherDepthRange/2 の間でランダムに決定
           const targetZ =
             -gatherDepthRange / 2 + Math.random() * gatherDepthRange;
-          // 散乱用のベクトル S を生成（scatter と同じ方式）
           const theta = Math.random() * 2 * Math.PI;
           const zDir = Math.random() * 2 - 1; // -1 ～ 1
           const xyLen = Math.sqrt(1 - zDir * zDir);
@@ -124,13 +116,15 @@ class ParticleEffectText {
             targetX: x,
             targetY: y,
             targetZ: targetZ,
-            vx: Sx, // この S を後の scatter 時に使用
+            vx: Sx,
             vy: Sy,
             vz: Sz,
             life: 0,
             maxLife: this.inDuration + this.holdDuration + this.scatterDuration,
             scattered: false,
             color: this.textColor,
+            xRough: this.rough * (1 - Math.random()) * 2,
+            yRough: this.rough * (1 - Math.random()) * 2,
           };
           this.particles.push(particle);
         }
@@ -153,9 +147,13 @@ class ParticleEffectText {
 
   /**
    * アニメーションループ
-   * @param onComplete エフェクト完了時に呼び出されるコールバック（次の文字表示用）
+   * onComplete: エフェクト完了時に呼び出されるコールバック
+   *
+   * 変更点:
+   * ・rough === 0 の時、グローバルなホールドフェーズ（inDuration～inDuration+holdDuration）の間は、
+   *   各粒子の描画をスキップし、キャンバス中央に文字を描画します。
    */
-  async animate(onComplete?: () => void) {
+  animate(onComplete?: () => void) {
     const centerX = this.margin + window.innerWidth / 2;
     const centerY = this.margin + window.innerHeight / 2;
 
@@ -163,73 +161,106 @@ class ParticleEffectText {
       this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
       this.frameCounter++;
 
-      for (const p of this.particles) {
-        if (p.life < this.inDuration) {
-          // 【Gather（In）フェーズ】
-          const t = p.life / this.inDuration;
-          const tEase = this.easeOutQuad(t);
-          p.x = this.lerp(p.startX, p.targetX, tEase);
-          p.y = this.lerp(p.startY, p.targetY, tEase);
-          p.z = this.lerp(p.startZ, p.targetZ, tEase);
-        } else if (p.life < this.inDuration + this.holdDuration) {
-          // 【Hold フェーズ】: ターゲット位置に固定
-          p.x = p.targetX;
-          p.y = p.targetY;
-          p.z = p.targetZ;
-        } else {
-          // 【Scatter フェーズ】
-          if (!p.scattered) {
-            p.vx = -p.vx;
-            p.vy = -p.vy;
-            p.vz = -p.vz;
-            p.scattered = true;
+      // rough === 0 の場合、ホールドフェーズで文字を表示する
+      if (
+        this.rough === 0 &&
+        this.frameCounter >= this.inDuration &&
+        this.frameCounter < this.inDuration + this.holdDuration
+      ) {
+        // 各粒子の life を更新する
+        for (const p of this.particles) {
+          p.life++;
+        }
+        this.ctx.save();
+        this.ctx.font = this.font;
+        this.ctx.textAlign = "center";
+        this.ctx.textBaseline = "middle";
+        this.ctx.fillStyle = this.textColor;
+        this.ctx.fillText(this.text, centerX, centerY);
+        this.ctx.restore();
+      } else {
+        // ホールドフェーズ以外は各粒子をアニメーションさせて描画
+        for (const p of this.particles) {
+          if (p.life < this.inDuration) {
+            // 【Gather（In）フェーズ】
+            if (this.appearType === 1) {
+              const halfDuration = this.inDuration / 2;
+              if (p.life < halfDuration) {
+                const t = p.life / halfDuration;
+                p.x = p.startX + (p.xRough || 0);
+                p.y = p.startY;
+                // 例として、startZ から startZ-20 へイージング
+                const intermediateZ = this.lerp(p.startZ, p.startZ - 20, 0.5);
+                p.z = this.lerp(p.startZ, intermediateZ, this.easeOutQuad(t));
+              } else {
+                const t = (p.life - halfDuration) / halfDuration;
+                const tEase = this.easeOutQuad(t);
+                p.x = this.lerp(p.startX, p.targetX, tEase) + (p.xRough || 0);
+                p.y = this.lerp(p.startY, p.targetY, tEase);
+                p.z = this.lerp(p.startZ, p.targetZ, tEase);
+              }
+            } else {
+              const t = p.life / this.inDuration;
+              const tEase = this.easeOutQuad(t);
+              p.x = this.lerp(p.startX, p.targetX, tEase) + (p.xRough || 0);
+              p.y = this.lerp(p.startY, p.targetY, tEase);
+              p.z = this.lerp(p.startZ, p.targetZ, tEase);
+            }
+          } else if (p.life >= this.inDuration + this.holdDuration) {
+            // 【Scatter（霧散）フェーズ】
+            if (!p.scattered) {
+              p.vx = -p.vx;
+              p.vy = -p.vy;
+              p.vz = -p.vz;
+              p.scattered = true;
+            }
+            p.x += p.vx;
+            p.y += p.vy;
+            p.z += p.vz;
           }
-          p.x += p.vx;
-          p.y += p.vy;
-          p.z += p.vz;
+          // 非ホールドフェーズでは各粒子の life を更新し、描画します
+          p.life++;
+
+          // Scatter フェーズではフェードアウト
+          let opacity = 1;
+          if (p.life >= this.inDuration + this.holdDuration) {
+            const scatterLife = p.life - (this.inDuration + this.holdDuration);
+            opacity = 1 - scatterLife / this.scatterDuration;
+            opacity = Math.max(opacity, 0);
+          }
+
+          // パースペクティブ投影
+          const effectiveZ = Math.max(p.z, -this.focalLength);
+          const scale = this.focalLength / (this.focalLength + effectiveZ);
+          const screenX = centerX + (p.x - centerX) * scale;
+          const screenY = centerY + (p.y - centerY) * scale;
+          const radius = this.particleSize * scale;
+
+          // ★ フラッシュ効果 ★
+          if (
+            p.life === this.inDuration &&
+            this.frameCounter <= this.inDuration + this.flashDuration
+          ) {
+            const flashProgress =
+              (this.frameCounter - this.inDuration) / this.flashDuration;
+            this.ctx.shadowColor = p.color;
+            this.ctx.shadowBlur = 20 * (1 - flashProgress);
+          } else {
+            this.ctx.shadowBlur = 0;
+          }
+
+          // 粒子描画
+          this.ctx.fillStyle = `rgba(${this.hexToRgb(p.color)}, ${opacity})`;
+          this.ctx.beginPath();
+          this.ctx.arc(screenX, screenY, radius, 0, Math.PI * 2);
+          this.ctx.fill();
         }
-        p.life++;
-
-        // Scatter フェーズではフェードアウト
-        let opacity = 1;
-        if (p.life >= this.inDuration + this.holdDuration) {
-          const scatterLife = p.life - (this.inDuration + this.holdDuration);
-          opacity = 1 - scatterLife / this.scatterDuration;
-          opacity = Math.max(opacity, 0);
-        }
-
-        // パースペクティブ投影
-        const effectiveZ = Math.max(p.z, -this.focalLength);
-        const scale = this.focalLength / (this.focalLength + effectiveZ);
-        const screenX = centerX + (p.x - centerX) * scale;
-        const screenY = centerY + (p.y - centerY) * scale;
-        const radius = this.particleSize * scale;
-
-        // ★ フラッシュ効果 ★
-        // Hold フェーズ開始直後、flashDuration フレーム間、影（輝き）を追加
-        if (
-          p.life === this.inDuration &&
-          this.frameCounter <= this.inDuration + this.flashDuration
-        ) {
-          const flashProgress =
-            (this.frameCounter - this.inDuration) / this.flashDuration;
-          this.ctx.shadowColor = p.color;
-          this.ctx.shadowBlur = 20 * (1 - flashProgress);
-        } else {
-          this.ctx.shadowBlur = 0;
-        }
-
-        // 粒子描画
-        this.ctx.fillStyle = `rgba(${this.hexToRgb(p.color)}, ${opacity})`;
-        this.ctx.beginPath();
-        this.ctx.arc(screenX, screenY, radius, 0, Math.PI * 2);
-        this.ctx.fill();
       }
 
       // 寿命が尽きた粒子は除外
       this.particles = this.particles.filter((p) => p.life < p.maxLife);
 
-      // 一定数以上の粒子が残っている間はアニメーション継続
+      // 残る粒子が一定数以上の場合はループ継続、なければ完了コールバックを実行
       if (this.particles.length > 40) {
         requestAnimationFrame(loop);
       } else {
@@ -260,44 +291,81 @@ class ParticleEffectText {
 }
 
 /**
- * 複数の文字列（例: ["文字1","文字2",...]）を順次表示するための関数
- * @param texts 表示する文字列の配列
+ * 複数のテキストを順次表示する関数（await で順次完了を待てる）
+ * @param texts 表示するテキストの配列
  * @param chosenColor 使用する色
+ * @param config 各種設定（rough, appearType, particleSize, inDuration, holdDuration, scatterDuration）
  */
-function startSequentialEffectText(texts: string[], chosenColor: string) {
-  let currentIndex = 0;
-
-  const runEffect = () => {
-    if (currentIndex < texts.length) {
-      // ParticleEffect のインスタンス生成（各フェーズのフレーム数や margin などは適宜調整）
-      const effect = new ParticleEffectText(
-        "canvas",
-        texts[currentIndex],
-        "bold 50px Arial",
-        1, // particleSize（細かい粒子）
-        100, // inDuration: 集合（gather）フェーズのフレーム数
-        60, // holdDuration: テキスト形状の保持フレーズ数
-        100, // scatterDuration: 霧散フェーズのフレーム数
-        chosenColor,
-        100 // margin: 表示領域外の余白
-      );
-      effect.createParticlesFromText();
-      // アニメーション終了時に次の文字列のエフェクトを開始
-      effect.animate(() => {
-        currentIndex++;
-        runEffect();
-      });
-    }
-  };
-
-  runEffect();
+async function startSequentialEffectText(
+  texts: string[],
+  chosenColor: string,
+  config: {
+    rough: number;
+    appearType: number;
+    particleSize: number;
+    inDuration: number;
+    holdDuration: number;
+    scatterDuration: number;
+  } = {
+    rough: 0,
+    appearType: 0,
+    particleSize: 1,
+    inDuration: 100,
+    holdDuration: 60,
+    scatterDuration: 100,
+  }
+) {
+  for (const text of texts) {
+    const effect = new ParticleEffectText(
+      "canvas",
+      text,
+      "100px bebas-kai",
+      config.particleSize ?? 1,
+      config.inDuration ?? 100, // 集合フェーズのフレーム数
+      config.holdDuration ?? 60, // テキスト形状の保持フレーズ数
+      config.scatterDuration ?? 100, // 霧散フェーズのフレーム数
+      chosenColor,
+      100, // margin
+      config.rough,
+      config.appearType // appearType の指定
+    );
+    effect.createParticlesFromText();
+    // animate の完了を Promise で待つ
+    await new Promise<void>((resolve) => {
+      effect.animate(resolve);
+    });
+  }
 }
 
-export const textAnime = (inputText: string, color: string = "#000000") => {
+/**
+ * textAnime 関数
+ * inputText をカンマ区切りで分割し、各テキストのエフェクトが順次完了するまで await で待機します。
+ * @param inputText 表示するテキスト（例："Hello, World, Foo"）
+ * @param color 使用する色（例: "#09d062"）
+ * @param config 各種設定（rough, appearType, particleSize, inDuration, holdDuration, scatterDuration）
+ */
+export const textAnime = async (
+  inputText: string,
+  color: string = "#09d062",
+  config: {
+    rough: number;
+    appearType: number;
+    particleSize: number;
+    inDuration: number;
+    holdDuration: number;
+    scatterDuration: number;
+  } = {
+    rough: 0,
+    appearType: 0,
+    particleSize: 1,
+    inDuration: 100,
+    holdDuration: 60,
+    scatterDuration: 100,
+  }
+) => {
   const texts = inputText
     .split(",")
     .map((t) => t.trim())
     .filter((t) => t !== "");
-
-  startSequentialEffectText(texts, color);
+  await startSequentialEffectText(texts, color, config);
 };
